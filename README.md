@@ -6,7 +6,7 @@
 
 | 技能 | 说明 |
 | --- | --- |
-| [taobao-spec-cropper](taobao-spec-cropper/) | 把布料色卡、网格长图或商品图裁成 800×800 PNG 规格图，保留编号、统一位置、按序命名并打包 ZIP |
+| [taobao-spec-cropper](taobao-spec-cropper/) | 裁成 800×800 PNG 规格图，保留编号、统一位置，按需生成商品 SKU Excel |
 
 各技能的详细用法见其目录内的 `README.md` 与 `SKILL.md`。
 

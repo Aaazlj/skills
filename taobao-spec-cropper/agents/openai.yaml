@@ -1,4 +1,4 @@
 interface:
   display_name: "淘宝规格图裁剪"
-  short_description: "把色卡或商品图裁成 800×800 PNG，保留编号并统一位置"
-  default_prompt: "使用 $taobao-spec-cropper 将我提供的图片裁成独立的 800×800 PNG 规格图，保留原编号、统一编号位置，并按 01_颜色.png 起命名。"
+  short_description: "把色卡裁成 800×800 PNG，保留编号，并可选生成商品 SKU Excel"
+  default_prompt: "使用 $taobao-spec-cropper 裁剪规格图并统一编号位置，让我选择只裁图或同时按商品信息生成 SKU Excel。"

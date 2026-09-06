@@ -71,7 +71,18 @@ python scripts/crop_specs.py render --input '原图.jpg' --layout '本次裁切.
 - `render`：每项 PNG + `_qa/`（框位图、联系表、`report.json`）+ 交付 ZIP。报告含源坐标、实际编号包围框、共享缩放倍率和校验结果。
 - 脚本会自动校验：PNG 可解码为 800×800 RGB、编号中心与底边一致（±0.5 px）、ZIP 内容完整。但数值校验不能替代看图，交付前应打开联系表检查首项、一位/两位编号交界、末行和黑白布片。
 
-## 运行测试
+## 可选生成 SKU Excel
+
+使用技能时可以选择“只裁图”或“同时生成 SKU Excel”，未选择时默认只裁图。也可以用已有规格图单独生成 SKU。安装 `openpyxl` 后运行：
+
+```powershell
+python scripts/generate_sku_excel.py --root '项目目录' --template '项目目录/SKU模板.xls' --sku-excel
+python scripts/test_generate_sku_excel.py
+```
+
+每个商品文件夹生成 `<商品文件夹名>_SKU.xlsx`：颜色分类如 `01#白色 (半米价)`，价格直接取 `商品信息.json` 的 `price`，数量固定 100。保留小数价格及模板隐藏工作表，不覆盖已有表。详见 [SKU 输入与检查规则](references/sku-excel.md)。
+
+## 裁图测试
 
 ```powershell
 python scripts/test_crop_specs.py

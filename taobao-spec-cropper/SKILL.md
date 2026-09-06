@@ -1,6 +1,6 @@
 ---
 name: taobao-spec-cropper
-description: 将用户提供的布料色卡、网格长图或单个商品图片裁成独立的 1:1、800×800 PNG 规格图。适用于“裁规格图”“色卡分割”“保留编号”“统一居中”等请求；保留原图编号、统一编号锚点，按 01_颜色.png 起顺序命名。不用于重新设计商品、生成纹理或修改颜色。
+description: 将用户提供的布料色卡、网格长图或单个商品图片裁成独立的 1:1、800×800 PNG 规格图，并可按商品信息生成 SKU Excel。适用于“裁规格图”“色卡分割”“保留编号”“统一居中”“生成 SKU”等请求；保留原图编号、统一编号锚点，按 01_颜色.png 起顺序命名。不用于重新设计商品、生成纹理或修改颜色。
 ---
 
 # 淘宝 800×800 PNG 规格图
@@ -38,5 +38,15 @@ python '.agents/skills/taobao-spec-cropper/scripts/crop_specs.py' render --input
 ```
 
 沿用已有 EDSR 清晰化时，在 `render` 命令追加 `--edsr-model 'models/EDSR_x4.pb'`。每项处理前会输出进度；模型异常直接报告错误，不静默冒充超分成功。
+
+## 可选：生成 SKU Excel
+
+开始时确认本次选择“只裁规格图”还是“裁规格图并生成 SKU Excel”。已有明确选择时直接沿用；未说明时提供一次可选询问并继续裁图，未选择生成则默认不生成 Excel。也支持直接从已有规格图生成 SKU，无需重新裁图。生成时读取 [references/sku-excel.md](references/sku-excel.md)，使用 [scripts/generate_sku_excel.py](scripts/generate_sku_excel.py)，并传入项目根目录、模板和 `--sku-excel`：
+
+```powershell
+python 'scripts/generate_sku_excel.py' --root '项目根目录' --template 'SKU模板.xls' --sku-excel
+```
+
+脚本处理根目录下每个包含 `商品信息.json` 的商品文件夹（可用 `--exclude` 排除），从其 `*_规格图_800_PNG` 目录读取按序 PNG 文件名；输出 `<商品文件夹>/<商品文件夹>_SKU.xlsx`。遵守本次用户指定的商品范围，不把历史排除项永久套用到新任务。表头固定为“颜色分类、价格、数量”，颜色分类格式为 `01#白色 (半米价)`，价格直接取 JSON 的 `price`，不除以二，数量固定为 `100`。保留模板的工作表结构和隐藏工作表；已有同名输出时停止，不覆盖旧文件。需要 `openpyxl`，只裁图时不需要它。
 
 修改辅助脚本后运行 `python '.agents/skills/taobao-spec-cropper/scripts/test_crop_specs.py'`，再对实际原图做一次预览检查。
