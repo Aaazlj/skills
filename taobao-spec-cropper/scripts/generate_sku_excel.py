@@ -11,7 +11,9 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 
-def generate(root: Path, template: Path, excludes: set[str]) -> list[Path]:
+def generate(root: Path, template: Path, excludes: set[str], *, product_dir: Path | None = None,
+             spec_dir_name: str | None = None, output_name: str | None = None,
+             output_in_spec_dir: bool = True) -> list[Path]:
     template_bytes = template.read_bytes()
     try:
         workbook = load_workbook(BytesIO(template_bytes))
@@ -23,7 +25,15 @@ def generate(root: Path, template: Path, excludes: set[str]) -> list[Path]:
     workbook.close()
     plans = []
     outputs: list[Path] = []
-    for folder in sorted(p for p in root.iterdir() if p.is_dir() and (p / "商品信息.json").is_file() and p.name not in excludes):
+    if product_dir is not None:
+        folders = [product_dir]
+    else:
+        folders = sorted(p for p in root.iterdir() if p.is_dir() and (p / "商品信息.json").is_file() and p.name not in excludes)
+    for folder in folders:
+        if folder.name in excludes:
+            continue
+        if not (folder / "商品信息.json").is_file():
+            raise ValueError(f"{folder}: 未找到 商品信息.json")
         info = json.loads((folder / "商品信息.json").read_text(encoding="utf-8-sig"))
         try:
             price = float(info["price"])
@@ -31,7 +41,11 @@ def generate(root: Path, template: Path, excludes: set[str]) -> list[Path]:
                 raise ValueError("价格必须是非负有限数值")
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"{folder.name}: 商品信息.json 的 price 无效") from exc
-        spec_dirs = sorted(p for p in folder.iterdir() if p.is_dir() and "规格图_800_PNG" in p.name)
+        if spec_dir_name:
+            spec_dirs = [folder / spec_dir_name] if (folder / spec_dir_name).is_dir() else []
+        else:
+            spec_dirs = sorted(p for p in folder.iterdir()
+                               if p.is_dir() and (p.name == "规格图" or "规格图_800_PNG" in p.name))
         if len(spec_dirs) != 1:
             raise ValueError(f"{folder.name}: 需要且只能有一个规格图目录")
         names = sorted((p.name for p in spec_dirs[0].iterdir() if p.is_file() and re.fullmatch(r"\d+_.+\.png", p.name, re.I)), key=lambda n: int(n.split("_", 1)[0]))
@@ -43,7 +57,7 @@ def generate(root: Path, template: Path, excludes: set[str]) -> list[Path]:
             if int(number) != index:
                 raise ValueError(f"{folder.name}: 编号不连续，发现 {number}")
             rows.append([f"{number}#{color} (半米价)", price, 100])
-        output = folder / f"{folder.name}_SKU.xlsx"
+        output = (spec_dirs[0] if output_in_spec_dir else folder) / (output_name or "sku.xls")
         if output.exists():
             raise FileExistsError(f"文件已存在，不覆盖：{output}")
         plans.append((folder, output, rows))
@@ -62,7 +76,7 @@ def generate(root: Path, template: Path, excludes: set[str]) -> list[Path]:
         with output.open("xb") as stream:
             workbook.save(stream)
         workbook.close()
-        check = load_workbook(output, read_only=True)
+        check = load_workbook(BytesIO(output.read_bytes()), read_only=True)
         if list(check[sheet_name].iter_rows(min_row=2, max_col=3, values_only=True)) != [tuple(row) for row in rows]:
             raise ValueError(f"成品校验失败：{output}")
         check.close()
@@ -77,11 +91,18 @@ def main() -> None:
     parser.add_argument("--template", required=True, type=Path)
     parser.add_argument("--sku-excel", action="store_true", help="确认生成 SKU Excel")
     parser.add_argument("--exclude", action="append", default=[], help="排除商品文件夹，可重复")
+    parser.add_argument("--product-dir", type=Path, help="只处理一个商品文件夹")
+    parser.add_argument("--spec-dir-name", help="指定规格图目录名，例如：规格图")
+    parser.add_argument("--output-name", help="指定输出文件名，默认 sku.xls")
+    parser.add_argument("--output-in-product-dir", action="store_true",
+                        help="把 SKU Excel 输出到商品文件夹而不是规格图目录内（默认在规格图目录内）")
     args = parser.parse_args()
     if not args.sku_excel:
         parser.error("需要显式传入 --sku-excel 才会生成文件")
     try:
-        generate(args.root.resolve(), args.template.resolve(), set(args.exclude))
+        generate(args.root.resolve(), args.template.resolve(), set(args.exclude),
+                 product_dir=args.product_dir, spec_dir_name=args.spec_dir_name,
+                 output_name=args.output_name, output_in_spec_dir=not args.output_in_product_dir)
     except (ValueError, OSError) as exc:
         parser.exit(2, f"错误：{exc}\n")
 

@@ -58,7 +58,8 @@ class CropSpecsTests(unittest.TestCase):
     def render(self, output="result", mode="render"):
         self.write_plan()
         with contextlib.redirect_stdout(io.StringIO()):
-            return run(mode, self.source_path, self.plan_path, self.base / output)
+            return run(mode, self.source_path, self.plan_path, self.base / output,
+                       make_zip=True, make_qa=True)
 
     def test_grid_number_alignment_png_and_zip(self):
         report = self.render()
@@ -104,6 +105,15 @@ class CropSpecsTests(unittest.TestCase):
         self.assertFalse(report["files_verified"])
         self.assertFalse((self.base / "result.zip").exists())
         self.assertTrue((self.base / "result" / "source-boxes.png").exists())
+
+    def test_render_skips_zip_and_qa_by_default(self):
+        self.write_plan()
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = run("render", self.source_path, self.plan_path, self.base / "plain")
+        self.assertTrue(report["files_verified"])
+        self.assertFalse((self.base / "plain.zip").exists())
+        self.assertFalse((self.base / "plain" / "_qa").exists())
+        self.assertEqual(len(list((self.base / "plain").glob("*.png"))), 3)
 
     def test_existing_directory_and_zip_are_preserved(self):
         self.render()

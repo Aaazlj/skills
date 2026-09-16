@@ -1,6 +1,6 @@
 # taobao-spec-cropper 淘宝规格图裁剪
 
-一个把布料色卡、网格长图或单张商品图整理成淘宝规格图的技能（skill）：自动分析网格、裁切每个规格项，输出可直接上架的 **800×800 RGB PNG**，保留原始数字编号、统一编号位置，并按 `01_白色.png`、`02_杏色.png` 的顺序命名，最后打包成 ZIP。
+一个把布料色卡、网格长图、详情页圆形色卡或单张商品图整理成淘宝规格图的技能（skill）：自动分析网格、裁切每个规格项，输出可直接上架的 **800×800 RGB PNG**，保留原始数字编号、统一编号位置，并按 `01_白色.png`、`02_杏色.png` 的顺序命名（必须是中文颜色名，不允许用 `No.01` 这类编号做文件名）。默认输出到商品文件夹的 `规格图/`，不生成 ZIP、不生成 `_qa/`（需要时用 `--zip` / `--qa` 显式开启）。
 
 适用于"裁规格图""色卡分割""保留编号""统一居中"等请求。不做重新设计商品、生成纹理或修改颜色。
 
@@ -10,8 +10,8 @@
 - 保留完整布片、原始数字编号和已有的颜色文字；不裁入相邻项、页头广告、说明区或空白末格。
 - 原内容等比例缩放，同一批使用共同缩放倍率。
 - 有编号时以编号墨迹包围框为锚点：中心 `x=400`、下边界 `y=590`，布片和编号一起平移；无编号时按实际内容居中。
-- 颜色名优先沿用原图文字，否则按可见颜色取常用中文名；无法判断时用"待确认颜色"。
-- 输出到新目录 `<原图名>_规格图_800_PNG`，并生成只含成品 PNG 的同名 ZIP；已存在时换新后缀，绝不覆盖。
+- 颜色名优先沿用原图文字，否则按可见颜色取常用中文名；无法判断时用"待确认颜色"。文件名必须是 `01_颜色.png` 形式，不允许 `01_No.01.png`。
+- 默认输出到商品文件夹的 `规格图/`，不生成 ZIP 和 `_qa/`；已存在时换新后缀，绝不覆盖。
 
 ## 目录结构
 
@@ -19,10 +19,16 @@
 taobao-spec-cropper/
 ├── SKILL.md                 # 技能定义与执行流程（供助手阅读）
 ├── agents/openai.yaml       # 界面展示信息（名称、简介、默认提示词）
-├── references/layout.md     # 裁切配置 JSON 格式说明
+├── references/
+│   ├── layout.md            # 裁切配置 JSON 格式说明
+│   └── sku-excel.md         # SKU Excel 输入与检查规则
 └── scripts/
     ├── crop_specs.py        # 主脚本：preview / render
-    └── test_crop_specs.py   # 行为测试（使用临时生成的图，不动项目图片）
+    ├── crop_detail_grid.py  # 详情页圆形色卡网格：直接输出 规格图/
+    ├── generate_sku_excel.py# 生成 SKU Excel
+    ├── test_crop_specs.py   # 行为测试（临时目录生成图片，不动项目图片）
+    ├── test_crop_detail_grid.py
+    └── test_generate_sku_excel.py
 ```
 
 ## 环境要求
@@ -45,14 +51,20 @@ taobao-spec-cropper/
 # 1. 预览：生成编号定位图 source-boxes.png 和成品联系表 contact-sheet.png，不产出 ZIP
 python scripts/crop_specs.py preview --input '原图.jpg' --layout '本次裁切.json' --output '_work/规格图预览'
 
-# 2. 渲染：输出成品 PNG、_qa/ 质检文件和 ZIP
-python scripts/crop_specs.py render --input '原图.jpg' --layout '本次裁切.json' --output '原图_规格图_800_PNG'
+# 2. 渲染：默认只输出成品 PNG（无 ZIP、无 _qa）；需要时追加 --zip --qa
+python scripts/crop_specs.py render --input '原图.jpg' --layout '本次裁切.json' --output '规格图'
 
 # 可选：复用已有的 EDSR 模型做超分清晰化
-python scripts/crop_specs.py render --input '原图.jpg' --layout '本次裁切.json' --output '原图_规格图_800_PNG' --edsr-model 'models/EDSR_x4.pb'
+python scripts/crop_specs.py render --input '原图.jpg' --layout '本次裁切.json' --output '规格图' --edsr-model 'models/EDSR_x4.pb'
+
+# 详情页长图里的 4 列圆形色卡（每项下方 No.01 这类编号）：直接生成 800×800 规格图
+# --names 必填：按可见颜色命名 01_白色.png，不允许用 No. 编号做文件名
+python scripts/crop_detail_grid.py --input '商品/详情图/详情图01.jpg' --cols 4 --names '白色,米白色,浅米色'
 ```
 
 路径可含中文和空格。预览与成品目录都必须尚不存在，重新运行请换新目录。
+
+`crop_detail_grid.py` 默认输出到 `详情图/` 上一级的 `规格图/`，自动跳过没有布片的空白占位圆（需要保留时加 `--keep-empty`），不生成 ZIP 和 `_qa/`；`--names` 为必填，按有效色卡顺序命名 `01_颜色.png`，数量不一致或未传都会直接报错。页头或背面示意图干扰检测时可用 `--rows`、`--cols` 固定行列。
 
 ## 裁切配置
 
@@ -68,7 +80,7 @@ python scripts/crop_specs.py render --input '原图.jpg' --layout '本次裁切.
 ## 输出与质检
 
 - `preview`：原图框位图（红框小格、蓝框保留内容、绿框编号）、800×800 模拟成品联系表、`report.json`。
-- `render`：每项 PNG + `_qa/`（框位图、联系表、`report.json`）+ 交付 ZIP。报告含源坐标、实际编号包围框、共享缩放倍率和校验结果。
+- `render`：每项 PNG，默认无 `_qa/`、无 ZIP；追加 `--qa` 输出 `_qa/`（框位图、联系表、`report.json`），追加 `--zip` 生成交付 ZIP。报告含源坐标、实际编号包围框、共享缩放倍率和校验结果。
 - 脚本会自动校验：PNG 可解码为 800×800 RGB、编号中心与底边一致（±0.5 px）、ZIP 内容完整。但数值校验不能替代看图，交付前应打开联系表检查首项、一位/两位编号交界、末行和黑白布片。
 
 ## 可选生成 SKU Excel
@@ -80,7 +92,9 @@ python scripts/generate_sku_excel.py --root '项目目录' --template '项目目
 python scripts/test_generate_sku_excel.py
 ```
 
-每个商品文件夹生成 `<商品文件夹名>_SKU.xlsx`：颜色分类如 `01#白色 (半米价)`，价格直接取 `商品信息.json` 的 `price`，数量固定 100。保留小数价格及模板隐藏工作表，不覆盖已有表。详见 [SKU 输入与检查规则](references/sku-excel.md)。
+每个商品文件夹默认在规格图目录内生成 `sku.xls`（XLSX 内容）：颜色分类为 `01#白色 (半米价)` 这种 `序号#中文颜色名 (半米价)` 形式（颜色名取规格图文件名），价格直接取 `商品信息.json` 的 `price`，数量固定 100。保留小数价格及模板隐藏工作表，不覆盖已有表。详见 [SKU 输入与检查规则](references/sku-excel.md)。
+
+要改回输出到商品文件夹并使用其他文件名时，追加 `--output-in-product-dir --output-name '名称.xlsx'`；规格图目录名不是默认时可加 `--spec-dir-name '规格图'`；只处理单个商品时用 `--product-dir` 指定。
 
 ## 裁图测试
 

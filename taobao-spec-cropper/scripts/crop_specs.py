@@ -337,10 +337,10 @@ def save_reviews(source, items, images, directory, report):
         json.dump(report, stream, ensure_ascii=False, indent=2)
 
 
-def run(mode, input_path, layout_path, output_path, edsr_model=None):
+def run(mode, input_path, layout_path, output_path, edsr_model=None, make_zip=False, make_qa=False):
     input_path, layout_path, output_path = (Path(p).resolve() for p in (input_path, layout_path, output_path))
     archive_path = output_path.with_name(output_path.name + ".zip")
-    if output_path.exists() or (mode == "render" and archive_path.exists()):
+    if output_path.exists() or (mode == "render" and make_zip and archive_path.exists()):
         raise ValueError("Output directory/ZIP already exists; choose a new name (nothing was overwritten)")
     with layout_path.open(encoding="utf-8-sig") as stream:
         plan = json.load(stream)
@@ -376,17 +376,20 @@ def run(mode, input_path, layout_path, output_path, edsr_model=None):
                     raise ValueError(f"Output verification failed: {path}")
         if len(list(output_path.glob("*.png"))) != len(items):
             raise ValueError("PNG output count mismatch")
-        with zipfile.ZipFile(archive_path, "x", zipfile.ZIP_DEFLATED) as archive:
-            for item in items:
-                archive.write(output_path / item.filename, arcname=item.filename)
-        with zipfile.ZipFile(archive_path) as archive:
-            if archive.namelist() != [item.filename for item in items] or archive.testzip() is not None:
-                raise ValueError("ZIP verification failed")
+        if make_zip:
+            with zipfile.ZipFile(archive_path, "x", zipfile.ZIP_DEFLATED) as archive:
+                for item in items:
+                    archive.write(output_path / item.filename, arcname=item.filename)
+            with zipfile.ZipFile(archive_path) as archive:
+                if archive.namelist() != [item.filename for item in items] or archive.testzip() is not None:
+                    raise ValueError("ZIP verification failed")
+            report["zip"] = str(archive_path)
         report["files_verified"] = True
-        report["zip"] = str(archive_path)
-    save_reviews(source, items, images, output_path / "_qa" if mode == "render" else output_path, report)
+    if make_qa or mode != "render":
+        save_reviews(source, items, images, output_path / "_qa" if mode == "render" else output_path, report)
     print(json.dumps({"output": str(output_path), "count": len(items), "scale": scale,
-                      "verified": report["files_verified"], "zip": report.get("zip")}, ensure_ascii=False))
+                      "verified": report["files_verified"], "zip": report.get("zip"),
+                      "qa": make_qa or mode != "render"}, ensure_ascii=False))
     return report
 
 
@@ -399,9 +402,12 @@ def main():
     parser.add_argument("--layout", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--edsr-model", type=Path, help="Optional existing EDSR_x4.pb; never downloaded")
+    parser.add_argument("--zip", action="store_true", help="render 时额外生成同名 ZIP（默认不生成）")
+    parser.add_argument("--qa", action="store_true", help="render 时额外生成 _qa 质检目录（默认不生成）；preview 始终输出预览文件")
     args = parser.parse_args()
     try:
-        run(args.mode, args.input, args.layout, args.output, args.edsr_model)
+        run(args.mode, args.input, args.layout, args.output, args.edsr_model,
+            make_zip=args.zip, make_qa=args.qa)
     except (ValueError, OSError, cv2.error) as error:
         parser.exit(2, f"Error: {error}\n")
 
